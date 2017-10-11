@@ -5,7 +5,7 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 
 const WINDOW_WIDTH: u32 = 800;
-const WINDOW_HEIGHT: u32 = 600;
+const WINDOW_HEIGHT: u32 = 800;
 
 fn main() {
     let sdl_context = sdl2::init().unwrap();
@@ -18,17 +18,32 @@ fn main() {
     gl::load_with(|name| video_subsystem.gl_get_proc_address(name) as *const _);
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-    let points = [
-        -0.5f32, -0.5f32, 0.0f32,
-        0.5f32, -0.5f32, 0.0f32,
-        0.0f32,  0.5f32, 0.0f32,
-    ];
+    const n: usize = 20;
+    const base: usize = 3;
+    let mut points: [f32; n * base] = [0.0f32; n * base];
 
-    let colors = [
-        1.0f32, 0.0f32, 0.0f32,
-        0.0f32, 1.0f32, 0.0f32,
-        0.0f32, 0.0f32, 1.0f32
+    let angle_step = 2.0 * std::f32::consts::PI / (n as f32);
+
+    for i in 0 .. n {
+        points[i * base] = (i as f32 * angle_step).cos() * 0.5;
+        points[i * base + 1] = (i as f32 * angle_step).sin() * 0.5;
+        points[i * base + 2] = 0.0f32;
+    }
+
+
+    let flag = [
+        1.0f32, 1.0f32, 1.0f32,
+        0.0f32, 0.0f32, 1.0f32,
+        1.0f32, 0.0f32, 0.0f32
     ];
+    let mut colors: [f32; n * base] = [0.0f32; n * base];
+
+    for i in 0 .. n {
+        colors[i * base] = flag[i % 3 * base];
+        colors[i * base + 1] = flag[(i % 3 * base) + 1];
+        colors[i * base + 2] = flag[(i % 3 * base) + 2];
+    }
+
 
     let mut points_vbo = 0;
     unsafe {
@@ -79,11 +94,19 @@ fn main() {
         layout(location = 0) in vec3 vertex_position;
         layout(location = 1) in vec3 vertex_color;
 
+        uniform float angle;
+
         out vec3 color;
 
         void main() {
+            mat3 rotation_mat = mat3(
+                cos(angle),  sin(angle), 0,
+                -sin(angle), cos(angle), 0,
+                0,           0,          1
+            );
+
             color = vertex_color;
-            gl_Position = vec4(vertex_position, 1.0);
+            gl_Position = vec4(rotation_mat * vertex_position, 1.0);
         }
     "#).unwrap();
 
@@ -151,6 +174,7 @@ fn main() {
     }
 
     let mut shader_program = 0;
+    let mut angle_loc = 0;
     unsafe {
         shader_program = gl::CreateProgram();
         gl::AttachShader(shader_program, fs);
@@ -165,7 +189,18 @@ fn main() {
             panic!("ERROR: could not link shader program GL index {}",
                    shader_program);
         }
+
+        let angle_loc = gl::GetUniformLocation(
+            shader_program,
+            std::ffi::CString::new("angle").unwrap().as_ptr()
+        );
+
+        if angle_loc == -1 {
+            panic!("Could not set the angle uniform variable");
+        }
     }
+
+    let mut angle = 0.0f32;
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -178,12 +213,15 @@ fn main() {
             }
         }
 
+        angle += 0.1;
+
         unsafe {
+            gl::Uniform1f(angle_loc, angle);
             gl::Clear(gl::COLOR_BUFFER_BIT);
             gl::Viewport(0, 0, WINDOW_WIDTH as i32, WINDOW_HEIGHT as i32);
             gl::UseProgram(shader_program);
             gl::BindVertexArray(vao);
-            gl::DrawArrays(gl::TRIANGLES, 0, 3);
+            gl::DrawArrays(gl::TRIANGLE_FAN, 0, n as i32);
         }
 
         window.gl_swap_window();
