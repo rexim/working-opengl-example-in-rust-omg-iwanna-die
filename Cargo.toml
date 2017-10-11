@@ -1,0 +1,8 @@
+[package]
+name = "opengl-probe"
+version = "0.1.0"
+authors = ["rexim <reximkut@gmail.com>"]
+
+[dependencies]
+sdl2 = "0.30"
+gl = "0.6.0"
